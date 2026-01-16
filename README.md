@@ -143,4 +143,4 @@ The command exits non-zero if hollowness exceeds threshold.
 
 ## License
 
-MIT
+Apache 2.0
