@@ -1,0 +1,120 @@
+# Sample hollowcheck contract demonstrating all available fields
+# This contract defines quality gates for AI-generated code output
+
+version: "1.0"
+name: "web-api-service"
+description: "Contract for a REST API service with authentication"
+
+# Files that must exist in the output
+required_files:
+  - path: "cmd/server/main.go"
+    required: true
+  - path: "internal/handlers/auth.go"
+    required: true
+  - path: "internal/handlers/users.go"
+    required: true
+  - path: "internal/middleware/auth.go"
+    required: true
+  - path: "internal/models/user.go"
+    required: true
+  - path: "go.mod"
+    required: true
+  - path: "README.md"
+    required: false
+
+# Symbols (functions, types, etc.) that must be defined
+required_symbols:
+  - name: "main"
+    kind: function
+    file: "cmd/server/main.go"
+  - name: "LoginHandler"
+    kind: function
+    file: "internal/handlers/auth.go"
+  - name: "LogoutHandler"
+    kind: function
+    file: "internal/handlers/auth.go"
+  - name: "AuthMiddleware"
+    kind: function
+    file: "internal/middleware/auth.go"
+  - name: "User"
+    kind: type
+    file: "internal/models/user.go"
+  - name: "CreateUser"
+    kind: method
+    file: "internal/handlers/users.go"
+  - name: "DefaultTimeout"
+    kind: const
+    file: "internal/config/config.go"
+
+# Patterns that indicate incomplete or placeholder code
+forbidden_patterns:
+  - pattern: "TODO"
+    description: "Work-in-progress marker"
+  - pattern: "FIXME"
+    description: "Known issue marker"
+  - pattern: "HACK"
+    description: "Workaround marker"
+  - pattern: "XXX"
+    description: "Attention marker"
+  - pattern: "NotImplementedError"
+    description: "Python-style stub"
+  - pattern: "panic\\(\"not implemented\"\\)"
+    description: "Go-style stub"
+  - pattern: "throw new Error\\([\"']not implemented[\"']\\)"
+    description: "JS-style stub"
+  - pattern: "pass\\s*#.*stub"
+    description: "Python pass stub"
+
+# Patterns that indicate mock/placeholder data
+mock_signatures:
+  patterns:
+    - pattern: "example\\.com"
+      description: "Placeholder domain"
+    - pattern: "test@"
+      description: "Test email prefix"
+    - pattern: "user@"
+      description: "Generic user email"
+    - pattern: "foo|bar|baz"
+      description: "Common placeholder names"
+    - pattern: "12345|00000|11111"
+      description: "Sequential/fake IDs"
+    - pattern: "lorem ipsum"
+      description: "Placeholder text"
+    - pattern: "Lorem Ipsum"
+      description: "Placeholder text (capitalized)"
+    - pattern: "asdf|qwerty"
+      description: "Keyboard mash placeholders"
+    - pattern: "changeme|password123|secret"
+      description: "Placeholder credentials"
+    - pattern: "xxx-xxx-xxxx"
+      description: "Placeholder phone format"
+  skip_test_files: true  # Skip mock_data detection in test files (default: true)
+
+# Minimum cyclomatic complexity requirements
+# Ensures functions have real logic, not just stubs
+complexity:
+  - symbol: "LoginHandler"
+    file: "internal/handlers/auth.go"
+    min_complexity: 4
+  - symbol: "AuthMiddleware"
+    file: "internal/middleware/auth.go"
+    min_complexity: 3
+  - symbol: "CreateUser"
+    file: "internal/handlers/users.go"
+    min_complexity: 5
+
+# Test functions that must exist
+required_tests:
+  - name: "TestLoginHandler"
+    file: "internal/handlers/auth_test.go"
+  - name: "TestLogoutHandler"
+    file: "internal/handlers/auth_test.go"
+  - name: "TestAuthMiddleware"
+    file: "internal/middleware/auth_test.go"
+  - name: "TestCreateUser"
+    file: "internal/handlers/users_test.go"
+  - name: "TestUser"
+    file: "internal/models/user_test.go"
+
+# Minimum test coverage percentage (optional)
+coverage_threshold: 80.0
