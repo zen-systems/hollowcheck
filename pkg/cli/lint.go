@@ -2,6 +2,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -21,6 +22,17 @@ const (
 	ExitFailed  = 1
 	ExitError   = 2
 )
+
+// Default contract file names to search for
+var defaultContractNames = []string{
+	"hollowcheck.yaml",
+	"hollow.yaml",
+	".hollowcheck.yaml",
+}
+
+// ErrThresholdExceeded is returned when the hollowness score exceeds the threshold.
+// This is a "soft" failure - the tool ran successfully but the code didn't pass.
+var ErrThresholdExceeded = errors.New("hollowness threshold exceeded")
 
 // Version is set at build time
 var Version = "0.1.0"
@@ -59,51 +71,64 @@ Exit codes:
 		},
 	}
 
-	cmd.Flags().StringVarP(&opts.ContractPath, "contract", "c", "", "Path to contract YAML file (required)")
+	cmd.Flags().StringVarP(&opts.ContractPath, "contract", "c", "", "Path to contract YAML file (default: auto-discover)")
 	cmd.Flags().StringVarP(&opts.Format, "format", "f", "pretty", "Output format: pretty or json")
 	cmd.Flags().IntVarP(&opts.Threshold, "threshold", "t", -1, "Override threshold (default: from contract or 25)")
 
-	cmd.MarkFlagRequired("contract")
-
 	return cmd
+}
+
+// discoverContract looks for a contract file in the current directory.
+// Returns the path to the first matching file, or an error if none found.
+func discoverContract() (string, error) {
+	for _, name := range defaultContractNames {
+		if _, err := os.Stat(name); err == nil {
+			return name, nil
+		}
+	}
+	return "", fmt.Errorf("no contract file found (looked for %s)", strings.Join(defaultContractNames, ", "))
 }
 
 func runLint(path string, opts *LintOptions) error {
 	// Validate format
 	if opts.Format != "pretty" && opts.Format != "json" {
-		fmt.Fprintf(os.Stderr, "Error: invalid format %q, must be 'pretty' or 'json'\n", opts.Format)
-		os.Exit(ExitError)
+		return fmt.Errorf("invalid format %q, must be 'pretty' or 'json'", opts.Format)
+	}
+
+	// Discover contract if not specified
+	contractPath := opts.ContractPath
+	if contractPath == "" {
+		discovered, err := discoverContract()
+		if err != nil {
+			return err
+		}
+		contractPath = discovered
 	}
 
 	// Parse contract
-	c, err := contract.ParseFile(opts.ContractPath)
+	c, err := contract.ParseFile(contractPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: failed to parse contract: %v\n", err)
-		os.Exit(ExitError)
+		return fmt.Errorf("failed to parse contract: %w", err)
 	}
 
 	// Validate contract
 	if err := contract.Validate(c); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: invalid contract: %v\n", err)
-		os.Exit(ExitError)
+		return fmt.Errorf("invalid contract: %w", err)
 	}
 
 	// Resolve path
 	absPath, err := filepath.Abs(path)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: invalid path: %v\n", err)
-		os.Exit(ExitError)
+		return fmt.Errorf("invalid path: %w", err)
 	}
 
 	// Check path exists
 	info, err := os.Stat(absPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			fmt.Fprintf(os.Stderr, "Error: path does not exist: %s\n", path)
-		} else {
-			fmt.Fprintf(os.Stderr, "Error: cannot access path: %v\n", err)
+			return fmt.Errorf("path does not exist: %s", path)
 		}
-		os.Exit(ExitError)
+		return fmt.Errorf("cannot access path: %w", err)
 	}
 
 	// Collect files to scan
@@ -111,8 +136,7 @@ func runLint(path string, opts *LintOptions) error {
 	if info.IsDir() {
 		files, err = collectGoFiles(absPath)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: failed to collect files: %v\n", err)
-			os.Exit(ExitError)
+			return fmt.Errorf("failed to collect files: %w", err)
 		}
 	} else {
 		files = []string{absPath}
@@ -122,8 +146,7 @@ func runLint(path string, opts *LintOptions) error {
 	runner := detect.NewRunner(absPath)
 	result, err := runner.Run(files, c)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: detection failed: %v\n", err)
-		os.Exit(ExitError)
+		return fmt.Errorf("detection failed: %w", err)
 	}
 
 	// Calculate score
@@ -137,19 +160,17 @@ func runLint(path string, opts *LintOptions) error {
 	// Output results
 	switch opts.Format {
 	case "json":
-		if err := report.WriteJSON(os.Stdout, path, opts.ContractPath, Version, result, hollowness); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: failed to write JSON: %v\n", err)
-			os.Exit(ExitError)
+		if err := report.WriteJSON(os.Stdout, path, contractPath, Version, result, hollowness); err != nil {
+			return fmt.Errorf("failed to write JSON: %w", err)
 		}
 	default:
-		report.WritePretty(os.Stdout, path, opts.ContractPath, Version, result, hollowness)
+		report.WritePretty(os.Stdout, path, contractPath, Version, result, hollowness)
 	}
 
-	// Exit with appropriate code
-	if hollowness.Passed {
-		os.Exit(ExitSuccess)
+	// Return error if threshold exceeded (handled specially by main)
+	if !hollowness.Passed {
+		return ErrThresholdExceeded
 	}
-	os.Exit(ExitFailed)
 
 	return nil
 }
