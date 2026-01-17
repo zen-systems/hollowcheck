@@ -3,12 +3,14 @@ package detect
 import (
 	"fmt"
 	"go/ast"
-	"go/parser"
+	goparser "go/parser"
 	"go/token"
+	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/zen-systems/hollowcheck/pkg/contract"
+	"github.com/zen-systems/hollowcheck/pkg/parser"
 )
 
 // symbolInfo holds information about a found symbol.
@@ -30,13 +32,21 @@ func DetectMissingSymbols(baseDir string, files []string, symbols []contract.Req
 	// Build a map of found symbols by file
 	foundSymbols := make(map[string][]symbolInfo)
 
-	// Only parse Go files
 	for _, file := range files {
-		if !strings.HasSuffix(file, ".go") {
-			continue
+		ext := filepath.Ext(file)
+		var syms []symbolInfo
+		var err error
+
+		if ext == ".go" {
+			// Use native go/ast for Go files
+			syms, err = extractSymbolsGo(file)
+		} else if p, ok := parser.ForExtension(ext); ok {
+			// Use parser registry for other supported languages
+			syms, err = extractSymbolsWithParser(file, p)
+		} else {
+			continue // unsupported extension
 		}
 
-		syms, err := extractSymbols(file)
 		if err != nil {
 			return nil, fmt.Errorf("parsing %s: %w", file, err)
 		}
@@ -88,13 +98,13 @@ func DetectMissingTests(baseDir string, files []string, tests []contract.Require
 	// Build a map of found test functions by file
 	foundTests := make(map[string][]string)
 
-	// Only parse Go test files
+	// Only parse Go test files (test detection is Go-specific for now)
 	for _, file := range files {
 		if !strings.HasSuffix(file, "_test.go") {
 			continue
 		}
 
-		syms, err := extractSymbols(file)
+		syms, err := extractSymbolsGo(file)
 		if err != nil {
 			return nil, fmt.Errorf("parsing %s: %w", file, err)
 		}
@@ -161,10 +171,10 @@ func DetectMissingTests(baseDir string, files []string, tests []contract.Require
 	return result, nil
 }
 
-// extractSymbols parses a Go file and extracts all symbol definitions.
-func extractSymbols(filePath string) ([]symbolInfo, error) {
+// extractSymbolsGo parses a Go file using go/ast and extracts all symbol definitions.
+func extractSymbolsGo(filePath string) ([]symbolInfo, error) {
 	fset := token.NewFileSet()
-	f, err := parser.ParseFile(fset, filePath, nil, 0)
+	f, err := goparser.ParseFile(fset, filePath, nil, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -213,4 +223,29 @@ func extractSymbols(filePath string) ([]symbolInfo, error) {
 	})
 
 	return symbols, nil
+}
+
+// extractSymbolsWithParser uses the parser interface for non-Go files.
+func extractSymbolsWithParser(filePath string, p parser.Parser) ([]symbolInfo, error) {
+	source, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, err
+	}
+
+	syms, err := p.ParseSymbols(source)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]symbolInfo, len(syms))
+	for i, sym := range syms {
+		result[i] = symbolInfo{
+			Name: sym.Name,
+			Kind: contract.SymbolKind(sym.Kind),
+			File: filePath,
+			Line: sym.Line,
+		}
+	}
+
+	return result, nil
 }

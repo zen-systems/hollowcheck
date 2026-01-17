@@ -1,5 +1,5 @@
 # Binaries
-hollowcheck
+/hollowcheck
 *.exe
 *.exe~
 *.dll

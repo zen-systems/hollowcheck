@@ -12,6 +12,7 @@ import (
 
 	"github.com/zen-systems/hollowcheck/pkg/contract"
 	"github.com/zen-systems/hollowcheck/pkg/detect"
+	"github.com/zen-systems/hollowcheck/pkg/parser"
 	"github.com/zen-systems/hollowcheck/pkg/report"
 	"github.com/zen-systems/hollowcheck/pkg/score"
 )
@@ -134,7 +135,7 @@ func runLint(path string, opts *LintOptions) error {
 	// Collect files to scan
 	var files []string
 	if info.IsDir() {
-		files, err = collectGoFiles(absPath)
+		files, err = collectFiles(absPath)
 		if err != nil {
 			return fmt.Errorf("failed to collect files: %w", err)
 		}
@@ -175,8 +176,15 @@ func runLint(path string, opts *LintOptions) error {
 	return nil
 }
 
-// collectGoFiles recursively collects all .go files in a directory.
-func collectGoFiles(root string) ([]string, error) {
+// collectFiles recursively collects all files with supported extensions.
+func collectFiles(root string) ([]string, error) {
+	// Build set of supported extensions
+	supported := make(map[string]bool)
+	supported[".go"] = true // Always support Go
+	for _, ext := range parser.SupportedExtensions() {
+		supported[ext] = true
+	}
+
 	var files []string
 
 	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
@@ -194,9 +202,12 @@ func collectGoFiles(root string) ([]string, error) {
 			return filepath.SkipDir
 		}
 
-		// Collect .go files
-		if !info.IsDir() && strings.HasSuffix(info.Name(), ".go") {
-			files = append(files, path)
+		// Collect files with supported extensions
+		if !info.IsDir() {
+			ext := filepath.Ext(info.Name())
+			if supported[ext] {
+				files = append(files, path)
+			}
 		}
 
 		return nil

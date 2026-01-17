@@ -566,9 +566,9 @@ func TestCalculateFuncComplexity(t *testing.T) {
 	}
 
 	for _, file := range files {
-		funcs, err := calculateComplexities(file)
+		funcs, err := calculateComplexitiesGo(file)
 		if err != nil {
-			t.Fatalf("calculateComplexities(%s) error = %v", file, err)
+			t.Fatalf("calculateComplexitiesGo(%s) error = %v", file, err)
 		}
 
 		for _, f := range funcs {

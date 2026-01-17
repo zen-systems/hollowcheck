@@ -3,12 +3,13 @@ package detect
 import (
 	"fmt"
 	"go/ast"
-	"go/parser"
+	goparser "go/parser"
 	"go/token"
+	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/zen-systems/hollowcheck/pkg/contract"
+	"github.com/zen-systems/hollowcheck/pkg/parser"
 )
 
 // funcComplexity holds complexity information for a function.
@@ -31,13 +32,21 @@ func DetectLowComplexity(baseDir string, files []string, requirements []contract
 	// Build a map of function complexities by file
 	funcsByFile := make(map[string][]funcComplexity)
 
-	// Only parse Go files
 	for _, file := range files {
-		if !strings.HasSuffix(file, ".go") {
-			continue
+		ext := filepath.Ext(file)
+		var funcs []funcComplexity
+		var err error
+
+		if ext == ".go" {
+			// Use native go/ast for Go files
+			funcs, err = calculateComplexitiesGo(file)
+		} else if p, ok := parser.ForExtension(ext); ok {
+			// Use parser registry for other supported languages
+			funcs, err = calculateComplexitiesWithParser(file, p)
+		} else {
+			continue // unsupported extension
 		}
 
-		funcs, err := calculateComplexities(file)
 		if err != nil {
 			return nil, fmt.Errorf("calculating complexity for %s: %w", file, err)
 		}
@@ -116,10 +125,10 @@ func DetectLowComplexity(baseDir string, files []string, requirements []contract
 	return result, nil
 }
 
-// calculateComplexities parses a Go file and calculates cyclomatic complexity for all functions.
-func calculateComplexities(filePath string) ([]funcComplexity, error) {
+// calculateComplexitiesGo parses a Go file and calculates cyclomatic complexity for all functions.
+func calculateComplexitiesGo(filePath string) ([]funcComplexity, error) {
 	fset := token.NewFileSet()
-	f, err := parser.ParseFile(fset, filePath, nil, 0)
+	f, err := goparser.ParseFile(fset, filePath, nil, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -186,4 +195,40 @@ func calculateFuncComplexity(fn *ast.FuncDecl) int {
 	})
 
 	return complexity
+}
+
+// calculateComplexitiesWithParser uses the parser interface for non-Go files.
+func calculateComplexitiesWithParser(filePath string, p parser.Parser) ([]funcComplexity, error) {
+	source, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get all symbols to find functions
+	symbols, err := p.ParseSymbols(source)
+	if err != nil {
+		return nil, err
+	}
+
+	var funcs []funcComplexity
+	for _, sym := range symbols {
+		if sym.Kind != "function" && sym.Kind != "method" {
+			continue
+		}
+
+		complexity, err := p.Complexity(source, sym.Name)
+		if err != nil {
+			return nil, err
+		}
+
+		funcs = append(funcs, funcComplexity{
+			Name:       sym.Name,
+			Complexity: complexity,
+			File:       filePath,
+			Line:       sym.Line,
+			IsMethod:   sym.Kind == "method",
+		})
+	}
+
+	return funcs, nil
 }
