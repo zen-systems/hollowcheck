@@ -68,7 +68,14 @@ func scanFileForPatterns(filePath string, patterns []compiledPattern) ([]Violati
 		line := scanner.Text()
 
 		for _, p := range patterns {
-			if p.regex.MatchString(line) {
+			// Find all matches with their positions
+			matches := p.regex.FindAllStringIndex(line, -1)
+			for _, match := range matches {
+				// Skip if match is inside a string literal
+				if isInsideStringLiteral(line, match[0]) {
+					continue
+				}
+
 				msg := fmt.Sprintf("forbidden pattern %q found", p.regex.String())
 				if p.description != "" {
 					msg = fmt.Sprintf("%s: %s", msg, p.description)
@@ -89,4 +96,41 @@ func scanFileForPatterns(filePath string, patterns []compiledPattern) ([]Violati
 	}
 
 	return violations, nil
+}
+
+// isInsideStringLiteral checks if a position in a line falls within a string literal.
+// Supports double-quoted, single-quoted, and backtick strings with escape handling.
+func isInsideStringLiteral(line string, pos int) bool {
+	// Track string state as we scan
+	var inString bool
+	var stringChar rune
+	escaped := false
+
+	for i, ch := range line {
+		if i >= pos {
+			return inString
+		}
+
+		if escaped {
+			escaped = false
+			continue
+		}
+
+		if ch == '\\' && inString {
+			escaped = true
+			continue
+		}
+
+		// Check for string delimiters
+		if ch == '"' || ch == '\'' || ch == '`' {
+			if !inString {
+				inString = true
+				stringChar = ch
+			} else if ch == stringChar {
+				inString = false
+			}
+		}
+	}
+
+	return inString
 }

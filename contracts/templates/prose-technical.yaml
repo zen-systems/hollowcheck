@@ -1,0 +1,101 @@
+# Hollowcheck Contract: Technical Documentation
+# Use this contract for API docs, user guides, README files, and technical writing.
+# Technical docs should be clear, precise, and avoid ambiguity.
+
+version: "1.0"
+name: technical-documentation
+description: Quality contract for technical documentation
+mode: prose
+
+prose:
+  extensions:
+    - .md
+    - .txt
+    - .rst
+    - .adoc
+
+  # Technical docs need precision
+  filler_threshold: 8
+  weasel_threshold: 8
+
+  weights:
+    filler: 0.25     # Fillers waste reader time
+    weasel: 0.30     # Vague language causes confusion in technical docs
+    density: 0.20    # Density is important but clarity trumps brevity
+    structure: 0.25  # Consistent structure helps navigation
+
+  density:
+    min_section_words: 30
+    low_threshold: 0.30    # Tech docs should be substantive
+    high_threshold: 0.85   # But accessible
+
+  # Custom patterns for weak technical documentation
+  custom_fillers:
+    - pattern: '\b(simply|just|easily)\b'
+      description: "dismissive simplification (may not be simple for reader)"
+      weight: 0.9
+    - pattern: '\b(obviously|of course|naturally)\b'
+      description: "assumes reader knowledge"
+      weight: 0.8
+    - pattern: '\b(it is worth noting that)\b'
+      description: "meta-phrase (just state the note)"
+      weight: 1.0
+    - pattern: '\b(please note that)\b'
+      description: "redundant politeness"
+      weight: 0.6
+
+  custom_weasels:
+    - pattern: '\b(should (work|function))\b'
+      description: "uncertain behavior (specify what happens)"
+      weight: 1.0
+    - pattern: '\b(may (vary|differ))\b'
+      description: "unspecified variation"
+      weight: 0.8
+    - pattern: '\b(in (most|some) cases)\b'
+      description: "vague applicability (specify when)"
+      weight: 0.9
+    - pattern: '\b(as needed|as appropriate|as required)\b'
+      description: "vague guidance (be specific)"
+      weight: 1.0
+    - pattern: '\b(various|several|multiple)\s+(options|ways|methods)\b'
+      description: "enumerate the options instead"
+      weight: 0.9
+    - pattern: '\b(etc\.?|and so on|and more)\b'
+      description: "incomplete enumeration"
+      weight: 1.0
+    - pattern: '\b(might|could|may)\s+(cause|result|lead)\b'
+      description: "uncertain outcome (specify conditions)"
+      weight: 0.9
+
+  # Patterns that are acceptable in technical docs
+  ignore_patterns:
+    - '\b(we|our)\b'              # Organizational voice is okay
+    - '\b(you|your)\b'            # Addressing user directly is fine
+    - '\bshould\b'                # Recommendations are fine
+    - '\bNote:\b'                 # Note callouts are standard
+
+# Forbidden patterns for technical documentation
+forbidden_patterns:
+  - pattern: 'TODO:|FIXME:|XXX:|HACK:'
+    description: "unresolved development note"
+  - pattern: '\[INSERT .+\]|\[PLACEHOLDER\]'
+    description: "unfilled placeholder"
+  - pattern: 'Lorem ipsum'
+    description: "placeholder text"
+  - pattern: 'example\.com|foo\.bar|test@test'
+    description: "placeholder domain/email"
+  - pattern: '\b(TBD|TBA|WIP)\b'
+    description: "incomplete content marker"
+  - pattern: 'Coming soon|Under construction'
+    description: "placeholder for missing content"
+  - pattern: '\?\?\?|\.\.\.'
+    description: "unfinished thought"
+
+# Required files for a complete documentation set (optional)
+# required_files:
+#   - path: README.md
+#     required: true
+#   - path: CHANGELOG.md
+#     required: false
+#   - path: CONTRIBUTING.md
+#     required: false

@@ -14,6 +14,15 @@ const (
 	PointsLowComplexity    = 10 // error
 	PointsMissingTest      = 5  // warning
 	PointsMockData         = 3  // warning
+
+	// Prose-specific point weights
+	PointsFillerPhrase        = 2 // warning
+	PointsWeaselWord          = 3 // warning
+	PointsLowDensity          = 5 // warning
+	PointsRepetitiveStructure = 3 // warning
+	PointsMiddleSag           = 8 // error
+	PointsWeakTransition      = 2 // info
+	PointsProseDefault        = 2 // default for prose issues
 )
 
 // DefaultThreshold is used when the contract doesn't specify one.
@@ -115,7 +124,24 @@ func getPoints(rule string) int {
 		return PointsMissingTest
 	case detect.RuleMockData:
 		return PointsMockData
+	// Prose rules
+	case "filler_phrase":
+		return PointsFillerPhrase
+	case "weasel_word":
+		return PointsWeaselWord
+	case "low_density":
+		return PointsLowDensity
+	case "prose_repetitive_opener":
+		return PointsRepetitiveStructure
+	case "prose_middle_sag":
+		return PointsMiddleSag
+	case "prose_weak_transition":
+		return PointsWeakTransition
 	default:
+		// For any unknown prose rules, return a default
+		if len(rule) > 6 && rule[:6] == "prose_" {
+			return PointsProseDefault
+		}
 		return 0
 	}
 }
@@ -151,5 +177,42 @@ func (s *HollownessScore) ViolationCount(rule string) int {
 	if !ok {
 		return 0
 	}
-	return points / getPoints(rule)
+	perViolation := getPoints(rule)
+	if perViolation == 0 {
+		return 0
+	}
+	return points / perViolation
+}
+
+// CalculateForNewViolations computes a score based only on new violations (baseline mode).
+// The threshold defaults to 0 if not specified (any new violation fails).
+func CalculateForNewViolations(result *detect.DetectionResult, threshold int) HollownessScore {
+	breakdown := make(map[string]int)
+	totalPoints := 0
+
+	// Only count new violations
+	for _, v := range result.NewViolations {
+		points := getPoints(v.Rule)
+		breakdown[v.Rule] += points
+		totalPoints += points
+	}
+
+	// Cap at 100
+	score := totalPoints
+	if score > 100 {
+		score = 100
+	}
+
+	// For baseline mode, default threshold is 0 (any new violation fails)
+	if threshold < 0 {
+		threshold = 0
+	}
+
+	return HollownessScore{
+		Score:     score,
+		Grade:     calculateGrade(score),
+		Breakdown: breakdown,
+		Passed:    score <= threshold,
+		Threshold: threshold,
+	}
 }

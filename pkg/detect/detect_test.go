@@ -697,3 +697,128 @@ func TestRunner(t *testing.T) {
 		t.Error("Runner.Run() expected to have errors")
 	}
 }
+
+func TestIsInsideStringLiteral(t *testing.T) {
+	tests := []struct {
+		name     string
+		line     string
+		pos      int
+		expected bool
+	}{
+		{
+			name:     "not in string",
+			line:     `// TODO: fix this`,
+			pos:      3, // position of "T" in TODO
+			expected: false,
+		},
+		{
+			name:     "inside double-quoted string",
+			line:     `fmt.Println("TODO: fix this")`,
+			pos:      13, // position of "T" in TODO
+			expected: true,
+		},
+		{
+			name:     "inside single-quoted string",
+			line:     `x := 'TODO'`,
+			pos:      6, // position of "T" in TODO
+			expected: true,
+		},
+		{
+			name:     "inside backtick string",
+			line:     "x := `TODO: fix this`",
+			pos:      6, // position of "T" in TODO
+			expected: true,
+		},
+		{
+			name:     "after string ends",
+			line:     `x := "test" // TODO: fix`,
+			pos:      15, // position of "T" in TODO in comment
+			expected: false,
+		},
+		{
+			name:     "escaped quote inside string",
+			line:     `x := "say \"TODO\" here"`,
+			pos:      10, // position of "T" in TODO
+			expected: true,
+		},
+		{
+			name:     "before string starts",
+			line:     `TODO := "value"`,
+			pos:      0, // position of "T" in TODO
+			expected: false,
+		},
+		{
+			name:     "mixed quotes - double inside single",
+			line:     `x := '"TODO"'`,
+			pos:      6, // inside single-quoted string
+			expected: true,
+		},
+		{
+			name:     "empty line",
+			line:     "",
+			pos:      0,
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isInsideStringLiteral(tt.line, tt.pos)
+			if result != tt.expected {
+				t.Errorf("isInsideStringLiteral(%q, %d) = %v, want %v",
+					tt.line, tt.pos, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestDetectForbiddenPatterns_StringLiteralSkipping(t *testing.T) {
+	// Create a temp file with patterns both in comments and string literals
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "test.go")
+
+	content := `package test
+
+// TODO: this should be detected
+func example() {
+	// FIXME: this comment should be detected
+	msg := "Remove TODO comment"  // String literal should be skipped
+	hint := fmt.Sprintf("Address FIXME at location")  // String literal should be skipped
+}
+`
+	if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	patterns := []contract.ForbiddenPattern{
+		{Pattern: "TODO", Description: "work in progress"},
+		{Pattern: "FIXME", Description: "known issue"},
+	}
+
+	result, err := DetectForbiddenPatterns([]string{filePath}, patterns)
+	if err != nil {
+		t.Fatalf("DetectForbiddenPatterns() error = %v", err)
+	}
+
+	// Should only detect patterns in comments, not in string literals
+	// - Line 3: "// TODO: this should be detected"
+	// - Line 5: "// FIXME: this comment should be detected"
+	// NOT:
+	// - Line 6: msg := "Remove TODO comment" (in string)
+	// - Line 7: hint := fmt.Sprintf("Address FIXME at location") (in string)
+	if len(result.Violations) != 2 {
+		t.Errorf("Expected 2 violations (only comments), got %d", len(result.Violations))
+		for _, v := range result.Violations {
+			t.Logf("  - Line %d: %s", v.Line, v.Message)
+		}
+	}
+
+	// Verify they're on the expected lines (3 and 5)
+	linesSeen := make(map[int]bool)
+	for _, v := range result.Violations {
+		linesSeen[v.Line] = true
+	}
+	if !linesSeen[3] || !linesSeen[5] {
+		t.Errorf("Expected violations on lines 3 and 5, got lines: %v", linesSeen)
+	}
+}

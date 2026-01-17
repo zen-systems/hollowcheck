@@ -1,0 +1,75 @@
+# Hollowcheck Contract: Blog Post
+# Use this contract for blog posts, articles, and informal technical content.
+# Blog posts can be more conversational but should still be clear and informative.
+
+version: "1.0"
+name: blog-post
+description: Quality contract for blog posts and informal articles
+mode: prose
+
+prose:
+  extensions:
+    - .md
+    - .txt
+    - .html
+
+  # Blog posts have more tolerance for conversational style
+  filler_threshold: 15
+  weasel_threshold: 12
+
+  weights:
+    filler: 0.25     # Some fillers are okay for voice
+    weasel: 0.25     # Weasels still undermine credibility
+    density: 0.25    # Density matters but can vary more
+    structure: 0.25  # Consistent structure keeps readers engaged
+
+  density:
+    min_section_words: 20
+    low_threshold: 0.25    # Blog posts can be lighter
+    high_threshold: 0.80   # But shouldn't be impenetrable
+
+  # Custom patterns for weak blog writing
+  custom_fillers:
+    - pattern: '\b(if you will)\b'
+      description: "unnecessary phrase"
+      weight: 1.0
+    - pattern: '\b(needless to say)\b'
+      description: "if needless, don't say it"
+      weight: 1.0
+    - pattern: '\b(at the end of the day)\b'
+      description: "overused phrase"
+      weight: 0.8
+    - pattern: '\b(when all is said and done)\b'
+      description: "cliche"
+      weight: 0.8
+    - pattern: '\b(it goes without saying)\b'
+      description: "then don't say it"
+      weight: 1.0
+
+  custom_weasels:
+    - pattern: '\b(everyone knows)\b'
+      description: "unsupported universal claim"
+      weight: 1.0
+    - pattern: '\b(most (people|developers|users))\b'
+      description: "unsupported majority claim"
+      weight: 0.8
+    - pattern: '\b(obviously|clearly)\b'
+      description: "dismissive assertion"
+      weight: 0.7
+
+  # Patterns that are okay in blog posts
+  ignore_patterns:
+    - '\bI (think|believe)\b'           # First person is okay
+    - '\b(you|your)\b'                  # Addressing reader directly is fine
+    - '\b(let\'s|we\'ll)\b'             # Inclusive language is fine
+
+# Forbidden patterns for blog posts
+forbidden_patterns:
+  - pattern: 'Lorem ipsum'
+    description: "placeholder text"
+  - pattern: '\[INSERT .+\]'
+    description: "unfilled placeholder"
+  - pattern: 'TODO:|FIXME:|XXX:'
+    description: "unresolved note"
+  - pattern: '\b(TBD|TBA)\b'
+    description: "incomplete content marker"

@@ -2,6 +2,8 @@
 package detect
 
 import (
+	"os"
+
 	"github.com/zen-systems/hollowcheck/pkg/contract"
 )
 
@@ -33,8 +35,11 @@ type Violation struct {
 
 // DetectionResult contains the results of running detection.
 type DetectionResult struct {
-	Violations []Violation
-	Scanned    int // files scanned
+	Violations    []Violation
+	Suppressed    []SuppressedViolation // Violations that were suppressed
+	NewViolations []Violation           // Violations not present in baseline (baseline mode only)
+	Scanned       int                   // files scanned
+	BaselineRef   string                // git ref used for baseline (if baseline mode)
 }
 
 // Merge combines another result into this one.
@@ -43,7 +48,13 @@ func (r *DetectionResult) Merge(other *DetectionResult) {
 		return
 	}
 	r.Violations = append(r.Violations, other.Violations...)
+	r.Suppressed = append(r.Suppressed, other.Suppressed...)
 	r.Scanned += other.Scanned
+}
+
+// SuppressedCount returns the number of suppressed violations.
+func (r *DetectionResult) SuppressedCount() int {
+	return len(r.Suppressed)
 }
 
 // AddViolation adds a violation to the result.
@@ -59,6 +70,27 @@ func (r *DetectionResult) HasErrors() bool {
 		}
 	}
 	return false
+}
+
+// NewViolationCount returns the number of new violations (baseline mode).
+func (r *DetectionResult) NewViolationCount() int {
+	return len(r.NewViolations)
+}
+
+// IsBaselineMode returns true if this result was generated in baseline mode.
+func (r *DetectionResult) IsBaselineMode() bool {
+	return r.BaselineRef != ""
+}
+
+// ViolationKey returns a unique key for a violation based on rule, file, line, and message.
+func ViolationKey(v Violation) string {
+	return v.Rule + "|" + v.File + "|" + v.Message
+}
+
+// ViolationsMatch checks if two violations are the same (ignoring line numbers).
+// We ignore line numbers because code changes can shift line numbers.
+func ViolationsMatch(a, b Violation) bool {
+	return a.Rule == b.Rule && a.File == b.File && a.Message == b.Message
 }
 
 // Detector is the interface for detection implementations.
@@ -79,6 +111,18 @@ func NewRunner(baseDir string) *Runner {
 // Run executes all detection checks defined in the contract.
 func (r *Runner) Run(files []string, c *contract.Contract) (*DetectionResult, error) {
 	result := &DetectionResult{}
+
+	// Collect suppressions from all files
+	suppressionMap, err := CollectSuppressions(files, os.ReadFile)
+	if err != nil {
+		return nil, err
+	}
+
+	// Flatten suppressions for filtering
+	var allSuppressions []Suppression
+	for _, suppressions := range suppressionMap {
+		allSuppressions = append(allSuppressions, suppressions...)
+	}
 
 	// Check required files
 	fileResult, err := DetectMissingFiles(r.BaseDir, c.RequiredFiles)
@@ -121,6 +165,13 @@ func (r *Runner) Run(files []string, c *contract.Contract) (*DetectionResult, er
 		return nil, err
 	}
 	result.Merge(testResult)
+
+	// Apply suppressions - filter violations and track suppressed ones
+	if len(allSuppressions) > 0 {
+		active, suppressed := FilterSuppressed(result.Violations, allSuppressions)
+		result.Violations = active
+		result.Suppressed = suppressed
+	}
 
 	return result, nil
 }

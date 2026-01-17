@@ -1,0 +1,70 @@
+# Hollowcheck Contract: Academic Writing
+# Use this contract for academic papers, research documents, and formal writing.
+# Academic writing should be precise, well-sourced, and avoid vague language.
+
+version: "1.0"
+name: academic-writing
+description: Quality contract for academic and research writing
+mode: prose
+
+prose:
+  extensions:
+    - .md
+    - .txt
+    - .rst
+    - .tex
+    - .adoc
+
+  # Academic writing has low tolerance for fillers and weasels
+  filler_threshold: 5
+  weasel_threshold: 5
+
+  weights:
+    filler: 0.20     # Fillers are less tolerable in academic writing
+    weasel: 0.35     # Weasel words severely undermine academic credibility
+    density: 0.25    # Information density matters
+    structure: 0.20  # Structure consistency is important
+
+  density:
+    min_section_words: 50    # Academic sections tend to be longer
+    low_threshold: 0.35      # Academic writing should be information-dense
+    high_threshold: 0.85     # But not impenetrable
+
+  # Custom patterns common in weak academic writing
+  custom_weasels:
+    - pattern: '\b(it is (well )?known that)\b'
+      description: "uncited common knowledge claim"
+      weight: 1.2
+    - pattern: '\b(one (can|could|might) argue)\b'
+      description: "anonymous argumentative claim"
+      weight: 1.0
+    - pattern: '\b(in (the )?literature)\b'
+      description: "vague literature reference"
+      weight: 0.8
+    - pattern: '\b(previous (studies|research|work))\b'
+      description: "uncited previous work reference"
+      weight: 1.0
+    - pattern: '\b(it (has been|is) (shown|demonstrated|proven))\b'
+      description: "passive proof without citation"
+      weight: 1.2
+
+  custom_fillers:
+    - pattern: '\b(in (this|the present) (paper|study|work|article))\b'
+      description: "meta-reference to current work"
+      weight: 0.5
+    - pattern: '\b(as (will be|is) (discussed|shown|demonstrated))\b'
+      description: "forward reference (just show it)"
+      weight: 0.8
+
+# Forbidden patterns for academic writing
+forbidden_patterns:
+  - pattern: '\b(I think|I believe|I feel)\b'
+    description: "first-person opinion (use objective language)"
+  - pattern: '\b(a lot of|lots of)\b'
+    description: "informal quantifier"
+  - pattern: '\b(stuff|things)\b'
+    description: "vague informal terms"
+  - pattern: '\b(basically|pretty much|kind of|sort of)\b'
+    description: "informal hedging"
+  - pattern: '!\s*$'
+    description: "exclamation marks are inappropriate in academic writing"
