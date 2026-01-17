@@ -83,6 +83,8 @@ func scanFileForMocks(filePath string, signatures []compiledMockSignature, sever
 
 	var violations []Violation
 	scanner := bufio.NewScanner(f)
+	// Increase buffer size for minified files (1MB max line length)
+	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
 	lineNum := 0
 
 	for scanner.Scan() {

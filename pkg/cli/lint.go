@@ -197,8 +197,8 @@ func collectFiles(root string) ([]string, error) {
 			return filepath.SkipDir
 		}
 
-		// Skip vendor directory
-		if info.IsDir() && info.Name() == "vendor" {
+		// Skip vendor and node_modules directories
+		if info.IsDir() && (info.Name() == "vendor" || info.Name() == "node_modules") {
 			return filepath.SkipDir
 		}
 
