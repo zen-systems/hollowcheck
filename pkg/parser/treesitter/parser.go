@@ -1,3 +1,5 @@
+//go:build !simple
+
 // Package treesitter provides a generic tree-sitter based parser.
 package treesitter
 

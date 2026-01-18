@@ -1,3 +1,5 @@
+//go:build !simple
+
 package languages
 
 import (

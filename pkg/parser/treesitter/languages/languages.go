@@ -1,3 +1,5 @@
+//go:build !simple
+
 // Package languages registers tree-sitter language parsers.
 // Import this package for side effects to register all supported languages.
 package languages

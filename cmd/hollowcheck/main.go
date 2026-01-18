@@ -9,9 +9,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/zen-systems/hollowcheck/pkg/cli"
-
-	// Register language parsers
-	_ "github.com/zen-systems/hollowcheck/pkg/parser/treesitter/languages"
 )
 
 func main() {

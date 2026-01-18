@@ -1,0 +1,35 @@
+version: "1.0"
+name: "strict"
+description: "Zero tolerance for scaffolding"
+
+# Remove 'threshold' - flowgate handles the score logic, 
+# or hollowcheck defaults to calculating it based on violations.
+
+forbidden_patterns:
+  # Polite Laziness (The specific issue you are hitting)
+  - pattern: "(?i)implement (your|the) .* logic"
+    description: "Do not use comments for logic. Write the code."
+  
+  - pattern: "(?i)example (database|email|implementation)"
+    description: "Do not provide examples. Write production code."
+  
+  - pattern: "(?i)pseudo-code"
+    description: "No pseudo-code."
+
+  # Standard Laziness
+  - pattern: "TODO"
+    description: "Unimplemented task."
+  - pattern: "FIXME"
+    description: "Fix required."
+  - pattern: 'panic\("not implemented"\)'
+    description: "Stub implementation."
+  
+  # Commented out code blocks
+  - pattern: "/\\*[\\s\\S]*?db\\.Exec"
+    description: "Uncomment your database logic."
+
+mock_signatures:
+  skip_test_files: true
+  patterns:
+    - pattern: 'example\.com'
+      description: "Placeholder domain"
