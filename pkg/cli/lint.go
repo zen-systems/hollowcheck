@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/zen-systems/hollowcheck/pkg/analysis"
 	"github.com/zen-systems/hollowcheck/pkg/contract"
 	"github.com/zen-systems/hollowcheck/pkg/detect"
 	"github.com/zen-systems/hollowcheck/pkg/detect/prose"
@@ -49,6 +50,7 @@ type LintOptions struct {
 	ShowSuppressed bool   // Show suppressed violations in output
 	DiffRef        string // Git ref for diff mode (only check changed files)
 	BaselineRef    string // Git ref for baseline mode (only fail on new violations)
+	UseSimple      bool   // Force use of simple (regex-based) analyzer
 }
 
 // NewLintCmd creates the lint command.
@@ -75,6 +77,10 @@ Prose mode (--mode prose) checks for:
   - Repetitive sentence structures
   - Middle sag (weak middle sections)
 
+Analysis engines:
+  --simple          Use regex-based analyzer (no CGO required, polyglot support)
+                    Default: AST-based analyzer with tree-sitter (requires CGO)
+
 Incremental modes:
   --diff <ref>      Only check files changed since git ref
   --baseline <ref>  Fail only if hollowness increased vs baseline
@@ -96,6 +102,7 @@ Exit codes:
 	cmd.Flags().BoolVar(&opts.ShowSuppressed, "show-suppressed", false, "Show details of suppressed violations")
 	cmd.Flags().StringVar(&opts.DiffRef, "diff", "", "Only check files changed since git ref (e.g., main, HEAD~1)")
 	cmd.Flags().StringVar(&opts.BaselineRef, "baseline", "", "Fail only if new violations vs git ref (e.g., origin/main)")
+	cmd.Flags().BoolVar(&opts.UseSimple, "simple", false, "Use regex-based analyzer (no CGO, supports any language)")
 
 	return cmd
 }
@@ -225,11 +232,24 @@ func runLint(path string, opts *LintOptions) error {
 		if err != nil {
 			return fmt.Errorf("prose detection failed: %w", err)
 		}
-	} else {
-		runner := detect.NewRunner(absPath)
-		result, err = runner.Run(files, c)
+	} else if opts.UseSimple {
+		// Use the simple (regex-based) analyzer
+		result, err = runSimpleAnalysis(files, c)
 		if err != nil {
-			return fmt.Errorf("detection failed: %w", err)
+			return fmt.Errorf("simple analysis failed: %w", err)
+		}
+	} else {
+		// Use the default analyzer (smart/tree-sitter or simple based on build tags)
+		var analyzer analysis.Analyzer
+		if analysis.IsCGOEnabled() {
+			analyzer = analysis.GetAnalyzer(absPath)
+		} else {
+			// Fallback to simple if CGO is not available
+			analyzer = analysis.NewSimpleAnalyzer()
+		}
+		result, err = runAnalysis(files, c, analyzer)
+		if err != nil {
+			return fmt.Errorf("analysis failed (%s engine): %w", analyzer.Name(), err)
 		}
 	}
 
@@ -549,4 +569,55 @@ func collectProseFiles(root string, cfg *contract.ProseConfig) ([]string, error)
 	})
 
 	return files, err
+}
+
+// runSimpleAnalysis runs the simple (regex-based) analyzer.
+func runSimpleAnalysis(files []string, c *contract.Contract) (*detect.DetectionResult, error) {
+	analyzer := analysis.NewSimpleAnalyzer()
+	return runAnalysis(files, c, analyzer)
+}
+
+// runAnalysis runs the given analyzer on the files.
+func runAnalysis(files []string, c *contract.Contract, analyzer analysis.Analyzer) (*detect.DetectionResult, error) {
+	// Read file contents into a map
+	fileContents := make(map[string]string, len(files))
+	for _, path := range files {
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("reading %s: %w", path, err)
+		}
+		fileContents[path] = string(content)
+	}
+
+	// Run analysis
+	analysisResult, err := analyzer.Analyze(fileContents, c)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert analysis.Result to detect.DetectionResult
+	return convertAnalysisResult(analysisResult), nil
+}
+
+// convertAnalysisResult converts an analysis.Result to a detect.DetectionResult.
+func convertAnalysisResult(ar *analysis.Result) *detect.DetectionResult {
+	if ar == nil {
+		return &detect.DetectionResult{}
+	}
+
+	result := &detect.DetectionResult{
+		Scanned: ar.Scanned,
+	}
+
+	for _, v := range ar.Violations {
+		result.Violations = append(result.Violations, detect.Violation{
+			Rule:     v.Rule,
+			Message:  v.Message,
+			File:     v.File,
+			Line:     v.Line,
+			Severity: v.Severity,
+		})
+	}
+
+	return result
 }

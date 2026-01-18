@@ -157,6 +157,7 @@ type funcComplexity struct {
 // tsCompiledPattern holds a pre-compiled regex with its metadata.
 type tsCompiledPattern struct {
 	regex       *regexp.Regexp
+	pattern     string // Original pattern string for display
 	description string
 }
 
@@ -182,6 +183,7 @@ func (a *TreeSitterAnalyzer) compilePatterns(patterns []contract.ForbiddenPatter
 		}
 		compiled = append(compiled, tsCompiledPattern{
 			regex:       re,
+			pattern:     p.Pattern,
 			description: p.Description,
 		})
 	}
@@ -198,6 +200,7 @@ func (a *TreeSitterAnalyzer) compileMockPatterns(patterns []contract.MockSignatu
 		}
 		compiled = append(compiled, tsCompiledPattern{
 			regex:       re,
+			pattern:     p.Pattern,
 			description: p.Description,
 		})
 	}
@@ -205,6 +208,7 @@ func (a *TreeSitterAnalyzer) compileMockPatterns(patterns []contract.MockSignatu
 }
 
 // scanContentForPatterns scans file content for pattern violations.
+// Returns detailed violations including line number, column, matched text, and context.
 func (a *TreeSitterAnalyzer) scanContentForPatterns(filePath, content string, patterns []tsCompiledPattern, rule, severity string) []Violation {
 	if len(patterns) == 0 {
 		return nil
@@ -220,21 +224,50 @@ func (a *TreeSitterAnalyzer) scanContentForPatterns(filePath, content string, pa
 		line := scanner.Text()
 
 		for _, p := range patterns {
-			matches := p.regex.FindAllStringIndex(line, -1)
+			matches := p.regex.FindAllStringSubmatchIndex(line, -1)
 			for _, match := range matches {
-				if isInsideStringLiteralTS(line, match[0]) {
+				if len(match) < 2 {
 					continue
 				}
 
-				msg := fmt.Sprintf("%s pattern %q found", ruleDescriptionTS(rule), p.regex.String())
-				if p.description != "" {
-					msg = fmt.Sprintf("%s: %s", msg, p.description)
+				startPos := match[0]
+				endPos := match[1]
+
+				if isInsideStringLiteralTS(line, startPos) {
+					continue
 				}
+
+				// Extract the matched content
+				matchedText := line[startPos:endPos]
+
+				// Build the message
+				msg := formatViolationMessageTS(rule, p.pattern, p.description, matchedText)
+
+				// Create context (trimmed line for display)
+				context := strings.TrimSpace(line)
+				if len(context) > 120 {
+					if startPos < 60 {
+						context = context[:117] + "..."
+					} else if startPos > len(context)-60 {
+						context = "..." + context[len(context)-117:]
+					} else {
+						start := startPos - 55
+						end := startPos + 60
+						if end > len(context) {
+							end = len(context)
+						}
+						context = "..." + context[start:end] + "..."
+					}
+				}
+
 				violations = append(violations, Violation{
 					Rule:     rule,
 					Message:  msg,
 					File:     filePath,
 					Line:     lineNum,
+					Column:   startPos + 1,
+					Match:    matchedText,
+					Context:  context,
 					Severity: severity,
 				})
 			}
@@ -242,6 +275,26 @@ func (a *TreeSitterAnalyzer) scanContentForPatterns(filePath, content string, pa
 	}
 
 	return violations
+}
+
+// formatViolationMessageTS creates a human-readable violation message.
+func formatViolationMessageTS(rule, pattern, description, matchedText string) string {
+	var msg string
+
+	switch rule {
+	case RuleForbiddenPattern:
+		msg = fmt.Sprintf("forbidden pattern found: %q", matchedText)
+	case RuleMockData:
+		msg = fmt.Sprintf("mock/placeholder data found: %q", matchedText)
+	default:
+		msg = fmt.Sprintf("pattern %q matched: %q", pattern, matchedText)
+	}
+
+	if description != "" {
+		msg = fmt.Sprintf("%s - %s", msg, description)
+	}
+
+	return msg
 }
 
 // extractSymbolsGo parses Go source content and extracts all symbol definitions.
@@ -503,18 +556,6 @@ func (a *TreeSitterAnalyzer) checkComplexityRequirements(funcComplexities map[st
 	}
 
 	return violations
-}
-
-// ruleDescriptionTS returns a human-readable description for a rule.
-func ruleDescriptionTS(rule string) string {
-	switch rule {
-	case RuleForbiddenPattern:
-		return "forbidden"
-	case RuleMockData:
-		return "mock data"
-	default:
-		return rule
-	}
 }
 
 // isInsideStringLiteralTS checks if a position in a line falls within a string literal.

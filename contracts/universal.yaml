@@ -1,0 +1,233 @@
+# Universal Hollowcheck Contract
+# Catches "hollow code" across polyglot codebases: Go, Python, Rust, C/C++, Java, Kotlin, TypeScript
+#
+# Usage:
+#   hollowcheck lint --contract contracts/universal.yaml --simple ./
+#
+# The --simple flag uses the regex-based analyzer which:
+#   - Works on ANY file type (language-agnostic)
+#   - Requires no CGO (runs on Windows without MinGW)
+#   - Detects patterns based on this contract configuration
+
+version: "1.0"
+name: "Universal Hollow Code Detector"
+description: "Catches placeholder code, stub implementations, and hollow patterns across all languages"
+
+# Include test files in analysis (default: false)
+# Set to true to also scan test files for forbidden patterns
+include_test_files: false
+
+# Forbidden patterns that indicate hollow/placeholder code
+# These patterns will trigger violations when found in source code
+forbidden_patterns:
+  # ============================================
+  # UNIVERSAL PATTERNS (All Languages)
+  # ============================================
+  - pattern: "\\bTODO\\b"
+    description: "TODO marker indicates incomplete implementation"
+
+  - pattern: "\\bFIXME\\b"
+    description: "FIXME marker indicates known issue"
+
+  - pattern: "\\bHACK\\b"
+    description: "HACK marker indicates questionable implementation"
+
+  - pattern: "\\bXXX\\b"
+    description: "XXX marker indicates attention needed"
+
+  - pattern: "\\bBUG\\b"
+    description: "BUG marker indicates known defect"
+
+  - pattern: "not\\s+implemented"
+    description: "Explicit 'not implemented' indicates stub code"
+
+  - pattern: "implement\\s+me"
+    description: "Explicit request for implementation"
+
+  - pattern: "stub\\b"
+    description: "Stub marker indicates placeholder"
+
+  # ============================================
+  # GO-SPECIFIC PATTERNS
+  # ============================================
+  - pattern: 'panic\s*\(\s*"not implemented'
+    description: "Go panic with 'not implemented' - stub function"
+
+  - pattern: 'panic\s*\(\s*"TODO'
+    description: "Go panic with TODO - incomplete implementation"
+
+  - pattern: 'panic\s*\(\s*"unimplemented'
+    description: "Go panic with 'unimplemented' - stub function"
+
+  # ============================================
+  # PYTHON-SPECIFIC PATTERNS
+  # ============================================
+  - pattern: "raise\\s+NotImplementedError"
+    description: "Python NotImplementedError - stub function"
+
+  - pattern: "\\bpass\\s*$"
+    description: "Python 'pass' statement (potential empty function body)"
+
+  - pattern: "raise\\s+NotImplemented\\b"
+    description: "Python NotImplemented (incorrect usage, should be NotImplementedError)"
+
+  # ============================================
+  # RUST-SPECIFIC PATTERNS
+  # ============================================
+  - pattern: "todo!\\s*\\("
+    description: "Rust todo!() macro - incomplete implementation"
+
+  - pattern: "unimplemented!\\s*\\("
+    description: "Rust unimplemented!() macro - stub function"
+
+  - pattern: "panic!\\s*\\(\\s*\"not implemented"
+    description: "Rust panic with 'not implemented'"
+
+  # ============================================
+  # C/C++-SPECIFIC PATTERNS
+  # ============================================
+  - pattern: "assert\\s*\\(\\s*0\\s*\\)"
+    description: "C/C++ assert(0) - deliberate crash placeholder"
+
+  - pattern: "assert\\s*\\(\\s*false\\s*\\)"
+    description: "C/C++ assert(false) - deliberate crash placeholder"
+
+  - pattern: "#error"
+    description: "C/C++ #error directive - compilation blocker"
+
+  - pattern: "abort\\s*\\(\\s*\\)"
+    description: "C/C++ abort() call - potential stub"
+
+  - pattern: "exit\\s*\\(\\s*1\\s*\\)"
+    description: "C/C++ exit(1) - potential error placeholder"
+
+  # ============================================
+  # JAVA/KOTLIN-SPECIFIC PATTERNS
+  # ============================================
+  - pattern: "throw\\s+new\\s+UnsupportedOperationException"
+    description: "Java UnsupportedOperationException - stub method"
+
+  - pattern: "throw\\s+UnsupportedOperationException"
+    description: "Kotlin UnsupportedOperationException - stub method"
+
+  - pattern: "TODO\\s*\\(\\s*\\)"
+    description: "Kotlin TODO() function - crashes at runtime"
+
+  - pattern: "throw\\s+new\\s+NotImplementedError"
+    description: "Java/Kotlin NotImplementedError - stub"
+
+  - pattern: "throw\\s+new\\s+RuntimeException\\s*\\(\\s*\".*not.*implement"
+    description: "RuntimeException with 'not implemented' message"
+
+  # ============================================
+  # TYPESCRIPT/JAVASCRIPT-SPECIFIC PATTERNS
+  # ============================================
+  - pattern: "throw\\s+new\\s+Error\\s*\\(\\s*['\"].*not.*implement"
+    description: "JS/TS Error with 'not implemented' message"
+
+  - pattern: "throw\\s+new\\s+Error\\s*\\(\\s*['\"]TODO"
+    description: "JS/TS Error with TODO message"
+
+  - pattern: "return\\s+undefined\\s*;?\\s*$"
+    description: "JS/TS 'return undefined' - likely stub implementation"
+
+  - pattern: "console\\.log\\s*\\("
+    description: "JS/TS console.log - debug statement (often left by AI)"
+
+  - pattern: "console\\.debug\\s*\\("
+    description: "JS/TS console.debug - debug statement"
+
+  - pattern: "console\\.warn\\s*\\("
+    description: "JS/TS console.warn - may indicate incomplete error handling"
+
+  - pattern: "console\\.error\\s*\\("
+    description: "JS/TS console.error - may indicate incomplete error handling"
+
+# Mock/placeholder data signatures
+mock_signatures:
+  skip_test_files: true
+  test_file_severity: "info"
+  patterns:
+    # ============================================
+    # PLACEHOLDER DOMAINS & EMAILS
+    # ============================================
+    - pattern: "example\\.com"
+      description: "Placeholder domain"
+
+    - pattern: "example\\.org"
+      description: "Placeholder domain"
+
+    - pattern: "test\\.com"
+      description: "Placeholder test domain"
+
+    - pattern: "localhost"
+      description: "Localhost reference (may be placeholder)"
+
+    - pattern: "fake@"
+      description: "Fake email prefix"
+
+    - pattern: "@example\\."
+      description: "Example domain email"
+
+    # ============================================
+    # PLACEHOLDER NAMES & VALUES
+    # ============================================
+    - pattern: "\\bfoo\\b"
+      description: "Placeholder name 'foo'"
+
+    - pattern: "\\bbar\\b"
+      description: "Placeholder name 'bar'"
+
+    - pattern: "\\bbaz\\b"
+      description: "Placeholder name 'baz'"
+
+    - pattern: "\\bqux\\b"
+      description: "Placeholder name 'qux'"
+
+    - pattern: "\\basdf\\b"
+      description: "Keyboard placeholder 'asdf'"
+
+    - pattern: "\\btest123\\b"
+      description: "Placeholder value 'test123'"
+
+    - pattern: "\\babc123\\b"
+      description: "Placeholder value 'abc123'"
+
+    # ============================================
+    # PLACEHOLDER IDs & TOKENS
+    # ============================================
+    - pattern: "xxx+[-_]"
+      description: "Placeholder with xxx pattern"
+
+    - pattern: "12345"
+      description: "Sequential number placeholder"
+
+    - pattern: "00000000-0000-0000-0000-000000000000"
+      description: "Nil UUID placeholder"
+
+    - pattern: "sk_test_"
+      description: "Stripe test key prefix"
+
+    - pattern: "pk_test_"
+      description: "Stripe test public key prefix"
+
+    - pattern: "AKIAIOSFODNN7EXAMPLE"
+      description: "AWS example access key"
+
+    # ============================================
+    # LOREM IPSUM & FILLER TEXT
+    # ============================================
+    - pattern: "lorem\\s+ipsum"
+      description: "Lorem ipsum placeholder text"
+
+    - pattern: "dolor\\s+sit\\s+amet"
+      description: "Lorem ipsum continuation"
+
+    - pattern: "placeholder"
+      description: "Explicit placeholder marker"
+
+    - pattern: "dummy"
+      description: "Dummy data marker"
+
+    - pattern: "sample\\s+data"
+      description: "Sample data marker"

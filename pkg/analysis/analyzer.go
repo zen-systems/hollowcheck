@@ -26,6 +26,9 @@ type Violation struct {
 	Message  string
 	File     string
 	Line     int
+	Column   int    // Column position of the match (1-indexed, 0 if unknown)
+	Match    string // The actual matched content
+	Context  string // The full line containing the match (for display)
 	Severity string // "error", "warning", "info"
 }
 
